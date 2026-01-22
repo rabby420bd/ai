@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini AI Super Hub</title>
+    <title>Gemini AI Super Tools</title>
     
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     
-    <!-- Babel -->
+    <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- FontAwesome for Icons (More stable than Lucide in CDN) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Google Generative AI SDK -->
     <script type="importmap">
@@ -28,146 +28,86 @@
     </script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@300;400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;600;700&display=swap');
         
         body { 
-            font-family: 'Noto Sans Bengali', sans-serif; 
+            font-family: 'Hind Siliguri', sans-serif; 
             background-color: #0f172a;
-            color: white;
+            color: #e2e8f0;
         }
 
-        /* Glassmorphism Effect */
-        .glass-panel {
+        /* Glass Effect */
+        .glass {
             background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
+            backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-        }
-
-        .glass-button {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(5px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
-        }
-        .glass-button:hover {
-            background: rgba(255, 255, 255, 0.15);
-            transform: translateY(-2px);
         }
 
         /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
-        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
         
-        /* Frame Styles */
-        .frame-polaroid { border: 12px solid #fff; border-bottom: 40px solid #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        .frame-vintage { border: 8px double #a16207; filter: sepia(0.4); }
-        .frame-neon { border: 4px solid #0ff; box-shadow: 0 0 10px #0ff; }
-        
-        /* Animations */
-        @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-            100% { transform: translateY(0px); }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
         }
-        .animate-float { animation: float 4s ease-in-out infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="min-h-screen">
+<body>
 
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
         import { GoogleGenerativeAI } from "@google/generative-ai";
         const { useState, useEffect, useRef } = React;
-        const { MessageSquare, Heart, Image: ImageIcon, Wand2, Settings, Upload, Download, Sparkles, RefreshCcw, Camera, X, Check, AlertCircle } = lucide;
 
-        // --- Config ---
+        // --- USER API KEY ---
         const DEFAULT_API_KEY = "AIzaSyCYCWM8SmsehBmYIbQr5995OIf_idQWJXA";
 
-        // --- Helper: Imagen Generation ---
-        async function generateImageWithGemini(prompt, apiKey) {
-            // Trying standard imagen-3.0-generate-001 endpoint
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
-            
-            const payload = {
-                instances: [{ prompt: prompt }],
-                parameters: { sampleCount: 1, aspectRatio: "1:1" }
-            };
+        // --- COMPONENTS ---
 
-            const response = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                const errData = await response.json();
-                console.error("Gemini Image Error:", errData);
-                throw new Error("API Error: আপনার Key তে Imagen 3 পারমিশন নেই বা কোটা শেষ।");
-            }
-
-            const data = await response.json();
-            if(data.predictions && data.predictions[0]?.bytesBase64Encoded) {
-                return `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}`;
-            }
-            throw new Error("No image data returned.");
-        }
-
-        // --- Helper: Toast Notification ---
-        const Toast = ({ msg, type, onClose }) => {
-            useEffect(() => {
-                const timer = setTimeout(onClose, 3000);
-                return () => clearTimeout(timer);
-            }, [onClose]);
-
-            return (
-                <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-bounce ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`}>
-                    {type === 'error' ? <AlertCircle size={18}/> : <Check size={18}/>}
-                    <span className="font-semibold">{msg}</span>
-                </div>
-            );
-        };
-
-        // --- Component: Sidebar Tab ---
-        const TabButton = ({ active, id, icon: Icon, label, onClick }) => (
+        // 1. Sidebar Button
+        const MenuBtn = ({ icon, label, active, onClick }) => (
             <button 
-                onClick={() => onClick(id)}
-                className={`flex items-center gap-3 px-4 py-3 w-full text-left rounded-xl transition-all duration-300 group ${
-                    active === id 
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 translate-x-1' 
-                    : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                onClick={onClick}
+                className={`w-full text-left px-6 py-4 flex items-center gap-3 transition-all duration-200 ${
+                    active 
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg border-r-4 border-white' 
+                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                 }`}
             >
-                <Icon size={20} className={`transition-transform duration-300 ${active===id ? 'scale-110' : 'group-hover:scale-110'}`} />
-                <span className="font-medium tracking-wide">{label}</span>
+                <i className={`fa-solid ${icon} text-xl w-6 text-center`}></i>
+                <span className="font-semibold text-lg">{label}</span>
             </button>
         );
 
-        // --- Component: Chat & Girlfriend ---
-        const ChatBot = ({ apiKey, mode, setToast }) => {
+        // 2. Chat Component
+        const ChatBot = ({ apiKey, mode }) => {
             const [messages, setMessages] = useState([]);
             const [input, setInput] = useState("");
             const [loading, setLoading] = useState(false);
-            const chatEndRef = useRef(null);
+            const scrollRef = useRef(null);
 
             useEffect(() => {
-                setMessages([]); 
-                if(mode === 'girlfriend') {
-                    setMessages([{role: 'model', text: "হাই বাবু! ❤️ কেমন আছো? তোমাকে অনেক মিস করছিলাম!"}]);
+                setMessages([]);
+                if (mode === 'gf') {
+                    setMessages([{ role: "model", text: "হাই জান! ❤️ কেমন আছো তুমি? আমাকে মিস করেছো?" }]);
                 } else {
-                    setMessages([{role: 'model', text: "নমস্কার! আমি Gemini AI, বলুন আপনাকে কীভাবে সাহায্য করতে পারি?"}]);
+                    setMessages([{ role: "model", text: "নমস্কার! আমি Gemini AI, বলুন আপনাকে কীভাবে সাহায্য করতে পারি?" }]);
                 }
             }, [mode]);
 
-            const sendMessage = async () => {
-                if (!input.trim() || !apiKey) {
-                    if(!apiKey) setToast({msg: "Settings এ গিয়ে API Key সেট করুন!", type: "error"});
-                    return;
-                }
-                const userMsg = input;
-                setMessages(prev => [...prev, { role: "user", text: userMsg }]);
+            const handleSend = async () => {
+                if (!input || !apiKey) return;
+                const userText = input;
+                setMessages(prev => [...prev, { role: "user", text: userText }]);
                 setInput("");
                 setLoading(true);
 
@@ -175,135 +115,225 @@
                     const genAI = new GoogleGenerativeAI(apiKey);
                     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
                     
-                    let systemPrompt = mode === 'girlfriend' 
-                        ? "Act as a sweet, caring, and possessive girlfriend named 'Riya'. Speak in a mix of Bengali and English (Banglish). Use emojis (❤️, 😘, 🥺, 😠). Call the user 'Babu' or 'Jan'. Reply concisely."
-                        : "You are a helpful AI assistant. Answer in Bengali.";
+                    let systemInstruction = mode === 'gf' 
+                        ? "Act as a loving, slightly possessive girlfriend named Riya. Speak in Bengali mixed with English ('Banglish'). Use emojis like ❤️, 😘. Be short and sweet."
+                        : "You are a helpful AI assistant. Reply in Bengali.";
 
-                    const result = await model.generateContent(`${systemPrompt}\nUser: ${userMsg}`);
-                    const response = await result.response;
-                    setMessages(prev => [...prev, { role: "model", text: response.text() }]);
+                    const chat = model.startChat({
+                        history: messages.map(m => ({
+                            role: m.role === 'model' ? 'model' : 'user',
+                            parts: [{ text: m.text }]
+                        })),
+                    });
+
+                    const result = await chat.sendMessage(systemInstruction + "\nUser: " + userText);
+                    const response = result.response.text();
+                    
+                    setMessages(prev => [...prev, { role: "model", text: response }]);
                 } catch (error) {
-                    setMessages(prev => [...prev, { role: "model", text: "API Error: দয়া করে Key চেক করুন।" }]);
+                    setMessages(prev => [...prev, { role: "model", text: "API Error. Please check key." }]);
                 }
                 setLoading(false);
             };
 
-            useEffect(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
+            useEffect(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
 
             return (
-                <div className="flex flex-col h-[550px] glass-panel rounded-2xl overflow-hidden relative">
-                    <div className={`p-4 flex items-center gap-3 border-b border-white/10 ${mode === 'girlfriend' ? 'bg-pink-500/10' : 'bg-blue-500/10'}`}>
-                        <div className="w-10 h-10 rounded-full bg-gray-700 overflow-hidden border-2 border-white/20">
-                            <img src={mode === 'girlfriend' ? "https://api.dicebear.com/7.x/avataaars/svg?seed=Riya&gender=female&style=circle" : "https://api.dicebear.com/7.x/bottts/svg?seed=Gemini"} alt="AI" />
+                <div className="flex flex-col h-[600px] glass rounded-xl overflow-hidden">
+                    <div className={`p-4 flex items-center gap-3 ${mode === 'gf' ? 'bg-pink-600' : 'bg-blue-600'}`}>
+                        <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-xl">
+                            {mode === 'gf' ? '👩‍❤️‍👨' : '🤖'}
                         </div>
-                        <div>
-                            <h3 className="font-bold text-lg">{mode === 'girlfriend' ? 'Riya ❤️' : 'Gemini AI'}</h3>
-                            <div className="flex items-center gap-1 text-xs text-green-400">
-                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Active Now
-                            </div>
-                        </div>
+                        <h3 className="font-bold text-white text-xl">{mode === 'gf' ? 'Riya (Girlfriend)' : 'Gemini Assistant'}</h3>
                     </div>
-                    
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                        {messages.map((msg, idx) => (
-                            <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-900/50">
+                        {messages.map((m, i) => (
+                            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[80%] px-4 py-2 rounded-2xl ${
-                                    msg.role === "user" 
-                                    ? "bg-blue-600 text-white rounded-tr-sm" 
-                                    : "bg-gray-700/50 text-gray-100 rounded-tl-sm border border-white/5"
+                                    m.role === 'user' ? 'bg-blue-500 text-white rounded-tr-none' : 'bg-gray-700 text-gray-200 rounded-tl-none'
                                 }`}>
-                                    {msg.text}
+                                    {m.text}
                                 </div>
                             </div>
                         ))}
-                        {loading && <div className="text-gray-400 text-xs ml-4">টাইপ করছে...</div>}
-                        <div ref={chatEndRef} />
+                        {loading && <div className="text-gray-400 ml-2">টাইপ করছে...</div>}
+                        <div ref={scrollRef}></div>
                     </div>
 
-                    <div className="p-3 bg-gray-800/50 flex gap-2">
-                        <input
-                            type="text"
+                    <div className="p-4 bg-gray-800 flex gap-2">
+                        <input 
                             value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                            placeholder={mode === 'girlfriend' ? "ভালোবাসার কথা লিখুন..." : "প্রশ্ন করুন..."}
-                            className="flex-1 bg-gray-900 border border-gray-600 rounded-full px-4 focus:border-blue-500 outline-none transition"
+                            onChange={e => setInput(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleSend()}
+                            className="flex-1 bg-gray-700 rounded-full px-5 py-3 outline-none text-white border border-gray-600 focus:border-blue-500"
+                            placeholder="Type a message..."
                         />
-                        <button onClick={sendMessage} className="bg-blue-600 p-3 rounded-full hover:bg-blue-500 transition shadow-lg">
-                            <MessageSquare size={18} />
+                        <button onClick={handleSend} className="bg-blue-600 w-12 h-12 rounded-full hover:bg-blue-500 flex items-center justify-center text-white transition">
+                            <i className="fa-solid fa-paper-plane"></i>
                         </button>
                     </div>
                 </div>
             );
         };
 
-        // --- Component: Caption Generator ---
-        const CaptionGen = ({ apiKey, setToast }) => {
+        // 3. Image Generator (Gemini)
+        const ImageGen = ({ apiKey }) => {
+            const [prompt, setPrompt] = useState("");
             const [image, setImage] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+
+            const generateImage = async () => {
+                if (!prompt) return;
+                setLoading(true);
+                setError(null);
+                setImage(null);
+
+                try {
+                    // Using Imagen 3 endpoint via fetch directly
+                    const response = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`,
+                        {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                instances: [{ prompt: prompt }],
+                                parameters: { sampleCount: 1, aspectRatio: "1:1" }
+                            })
+                        }
+                    );
+
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        throw new Error(data.error.message || "Permission Denied or Model Busy");
+                    }
+
+                    if (data.predictions && data.predictions[0]?.bytesBase64Encoded) {
+                        setImage(`data:image/png;base64,${data.predictions[0].bytesBase64Encoded}`);
+                    } else {
+                        throw new Error("No image generated.");
+                    }
+                } catch (err) {
+                    setError("Failed: আপনার API Key তে Imagen 3 এর এক্সেস নেই অথবা লিমিট শেষ।");
+                    console.error(err);
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="glass p-8 rounded-xl text-center">
+                    <h2 className="text-3xl font-bold mb-6 text-pink-400"><i className="fa-solid fa-wand-magic-sparkles"></i> Text to Image</h2>
+                    
+                    <div className="flex gap-2 max-w-xl mx-auto mb-8">
+                        <input 
+                            value={prompt}
+                            onChange={e => setPrompt(e.target.value)}
+                            className="flex-1 bg-gray-800 border border-gray-600 rounded-lg p-3 outline-none focus:border-pink-500"
+                            placeholder="Describe image (e.g., A cat in space suit)"
+                        />
+                        <button 
+                            onClick={generateImage}
+                            disabled={loading}
+                            className="bg-pink-600 hover:bg-pink-500 text-white px-6 py-3 rounded-lg font-bold"
+                        >
+                            {loading ? <span className="loader"></span> : "Create"}
+                        </button>
+                    </div>
+
+                    {error && <div className="text-red-400 mb-4 bg-red-900/20 p-2 rounded inline-block">{error}</div>}
+
+                    <div className="min-h-[300px] border-2 border-dashed border-gray-700 rounded-xl flex items-center justify-center bg-gray-900/50">
+                        {image ? (
+                            <img src={image} className="max-h-[400px] rounded shadow-2xl" alt="Generated" />
+                        ) : (
+                            <div className="text-gray-500">
+                                <i className="fa-regular fa-image text-4xl mb-2"></i>
+                                <p>No image generated yet</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // 4. Caption Generator
+        const CaptionGen = ({ apiKey }) => {
+            const [file, setFile] = useState(null);
             const [preview, setPreview] = useState(null);
-            const [category, setCategory] = useState("Happy");
+            const [mood, setMood] = useState("Happy");
             const [caption, setCaption] = useState("");
             const [loading, setLoading] = useState(false);
 
             const handleFile = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    setImage(file);
-                    setPreview(URL.createObjectURL(file));
+                const f = e.target.files[0];
+                if (f) {
+                    setFile(f);
+                    setPreview(URL.createObjectURL(f));
                     setCaption("");
                 }
             };
 
-            const generate = async () => {
-                if (!image || !apiKey) {
-                    if(!apiKey) setToast({msg: "API Key নেই!", type: "error"});
-                    return;
-                }
+            const generateCaption = async () => {
+                if (!file) return;
                 setLoading(true);
                 try {
                     const genAI = new GoogleGenerativeAI(apiKey);
                     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                    
+
+                    // Convert file to base64
                     const reader = new FileReader();
-                    reader.readAsDataURL(image);
+                    reader.readAsDataURL(file);
                     reader.onloadend = async () => {
                         const base64Data = reader.result.split(',')[1];
-                        const prompt = `Write a short social media caption for this image. Mood: ${category}. Language: Bengali mixed with English. Add hashtags.`;
                         
-                        const result = await model.generateContent([prompt, { inlineData: { data: base64Data, mimeType: image.type } }]);
+                        const prompt = `Write a short, engaging social media caption for this photo. Mood: ${mood}. Include emojis and hashtags. Language: Bengali mixed with English.`;
+                        
+                        const result = await model.generateContent([
+                            prompt,
+                            { inlineData: { data: base64Data, mimeType: file.type } }
+                        ]);
+                        
                         setCaption(result.response.text());
                         setLoading(false);
                     };
                 } catch (e) {
-                    setToast({msg: "Error Generating Caption", type: "error"});
+                    setCaption("Error generating caption.");
                     setLoading(false);
                 }
             };
 
             return (
-                <div className="glass-panel p-6 rounded-2xl">
-                    <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-purple-400"><Camera/> AI Caption</h2>
-                    <div className="grid md:grid-cols-2 gap-6">
-                        <div className="relative border-2 border-dashed border-gray-600 rounded-xl min-h-[250px] flex items-center justify-center bg-gray-800/30 hover:border-purple-500 transition overflow-hidden">
-                            {preview ? <img src={preview} className="w-full h-full object-cover" /> : <div className="text-gray-500 text-center"><Upload className="mx-auto mb-2"/>Upload Image</div>}
+                <div className="glass p-6 rounded-xl">
+                    <h2 className="text-2xl font-bold mb-6 text-purple-400"><i className="fa-solid fa-camera"></i> AI Caption Generator</h2>
+                    
+                    <div className="grid md:grid-cols-2 gap-8">
+                        <div className="border-2 border-dashed border-gray-600 rounded-xl h-64 flex items-center justify-center bg-gray-800 relative hover:border-purple-500 transition">
+                            {preview ? <img src={preview} className="h-full object-contain" /> : <span className="text-gray-500">Click to Upload Image</span>}
                             <input type="file" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*"/>
                         </div>
+
                         <div className="space-y-4">
                             <div>
-                                <label className="text-gray-400 text-sm block mb-2">Mood Select:</label>
-                                <div className="flex flex-wrap gap-2">
-                                    {['Happy', 'Sad', 'Attitude', 'Travel', 'Food'].map(c => (
-                                        <button key={c} onClick={() => setCategory(c)} className={`px-3 py-1 rounded-full text-xs transition ${category===c ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300'}`}>{c}</button>
+                                <label className="block text-gray-400 mb-2">Mood:</label>
+                                <div className="flex gap-2 flex-wrap">
+                                    {['Happy', 'Sad', 'Attitude', 'Funny'].map(m => (
+                                        <button key={m} onClick={() => setMood(m)} className={`px-4 py-1 rounded-full text-sm ${mood === m ? 'bg-purple-600' : 'bg-gray-700'}`}>{m}</button>
                                     ))}
                                 </div>
                             </div>
-                            <button onClick={generate} disabled={loading || !image} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-3 rounded-xl font-bold disabled:opacity-50">
+
+                            <button onClick={generateCaption} disabled={loading || !file} className="w-full bg-purple-600 hover:bg-purple-500 py-2 rounded font-bold">
                                 {loading ? "Generating..." : "Generate Caption"}
                             </button>
+
                             {caption && (
-                                <div className="p-4 bg-gray-800 rounded-xl border border-gray-700 mt-2 relative">
-                                    <p className="text-sm whitespace-pre-line">{caption}</p>
-                                    <button onClick={() => {navigator.clipboard.writeText(caption); setToast({msg:"Copied!", type:"success"})}} className="absolute top-2 right-2 text-gray-400 hover:text-white"><Check size={16}/></button>
+                                <div className="bg-gray-800 p-4 rounded border border-gray-700 mt-2">
+                                    <p>{caption}</p>
+                                    <button onClick={() => navigator.clipboard.writeText(caption)} className="mt-2 text-xs text-blue-400 hover:text-white">
+                                        <i className="fa-regular fa-copy"></i> Copy
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -312,72 +342,19 @@
             );
         };
 
-        // --- Component: Text to Image ---
-        const ImageGen = ({ apiKey, setToast }) => {
-            const [prompt, setPrompt] = useState("");
-            const [img, setImg] = useState(null);
-            const [loading, setLoading] = useState(false);
-
-            const handleGen = async () => {
-                if(!prompt) return;
-                setLoading(true);
-                setImg(null);
-                try {
-                    const url = await generateImageWithGemini(prompt, apiKey);
-                    setImg(url);
-                } catch (e) {
-                    setToast({msg: "ছবি তৈরি ব্যর্থ হয়েছে। Key বা কোটা চেক করুন।", type: "error"});
-                    console.error(e);
-                }
-                setLoading(false);
-            };
-
-            return (
-                <div className="glass-panel p-6 rounded-2xl text-center">
-                    <h2 className="text-2xl font-bold mb-6 flex items-center justify-center gap-2 text-pink-400"><Wand2/> Text to Image</h2>
-                    <div className="flex gap-2 max-w-lg mx-auto mb-6">
-                        <input 
-                            value={prompt} 
-                            onChange={(e)=>setPrompt(e.target.value)} 
-                            placeholder="A futuristic city in Bangladesh..." 
-                            className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 focus:border-pink-500 outline-none"
-                        />
-                        <button onClick={handleGen} disabled={loading} className="bg-pink-600 px-6 rounded-lg font-bold hover:bg-pink-500 transition disabled:opacity-50">
-                            {loading ? <RefreshCcw className="animate-spin"/> : "Create"}
-                        </button>
-                    </div>
-                    <div className="min-h-[300px] bg-gray-900/50 rounded-xl flex items-center justify-center border-2 border-dashed border-gray-700 relative">
-                        {loading ? (
-                            <div className="text-pink-400 animate-pulse flex flex-col items-center">
-                                <Sparkles size={40} className="mb-2"/>
-                                <p>Generating Art...</p>
-                            </div>
-                        ) : img ? (
-                            <div className="relative group w-full h-full p-2">
-                                <img src={img} className="max-h-[400px] mx-auto rounded-lg shadow-2xl" />
-                                <a href={img} download="ai_art.png" className="absolute bottom-4 right-4 bg-white text-black p-2 rounded-full opacity-0 group-hover:opacity-100 transition"><Download size={20}/></a>
-                            </div>
-                        ) : (
-                            <div className="text-gray-600 flex flex-col items-center"><ImageIcon size={48} className="mb-2 opacity-30"/><p>No image generated yet</p></div>
-                        )}
-                    </div>
-                </div>
-            );
-        };
-
-        // --- Component: Photo Studio ---
-        const PhotoStudio = ({ setToast }) => {
-            const [image, setImage] = useState(null);
-            const [filter, setFilter] = useState("none");
+        // 5. Photo Studio (Filters & Templates)
+        const PhotoStudio = () => {
+            const [imgSrc, setImgSrc] = useState(null);
+            const [filter, setFilter] = useState("");
             const [template, setTemplate] = useState("none");
             const canvasRef = useRef(null);
 
-            const handleFile = (e) => {
-                if(e.target.files[0]) {
+            const handleUpload = (e) => {
+                if (e.target.files[0]) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
                         const img = new Image();
-                        img.onload = () => setImage(img);
+                        img.onload = () => setImgSrc(img);
                         img.src = ev.target.result;
                     };
                     reader.readAsDataURL(e.target.files[0]);
@@ -385,74 +362,67 @@
             };
 
             useEffect(() => {
-                if(!image || !canvasRef.current) return;
+                if (!imgSrc || !canvasRef.current) return;
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext("2d");
                 
-                // Scale logic
-                const scale = Math.min(600 / image.width, 1);
-                canvas.width = image.width * scale;
-                canvas.height = image.height * scale;
+                // Scale
+                const scale = Math.min(500 / imgSrc.width, 1);
+                canvas.width = imgSrc.width * scale;
+                canvas.height = imgSrc.height * scale;
 
-                // Draw with Filter
-                ctx.filter = "none";
-                if(filter === 'enhance') ctx.filter = "contrast(1.2) brightness(1.1) saturate(1.2)";
-                if(filter === 'bw') ctx.filter = "grayscale(100%)";
-                if(filter === 'vintage') ctx.filter = "sepia(0.5)";
-                
-                ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                // Draw Image with Filter
+                ctx.filter = filter;
+                ctx.drawImage(imgSrc, 0, 0, canvas.width, canvas.height);
                 ctx.filter = "none";
 
-                // Draw Template
-                if(template === 'polaroid') {
-                    ctx.strokeStyle = "white";
-                    ctx.lineWidth = 30;
-                    ctx.strokeRect(0,0,canvas.width,canvas.height);
-                    ctx.fillStyle = "white";
+                // Templates
+                if (template === 'polaroid') {
+                    ctx.strokeStyle = "#fff";
+                    ctx.lineWidth = 40;
+                    ctx.strokeRect(0,0, canvas.width, canvas.height);
+                    ctx.fillStyle = "#fff";
                     ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
-                    ctx.fillStyle = "black";
+                    ctx.fillStyle = "#000";
                     ctx.font = "20px Arial";
-                    ctx.fillText("AI Memories", 20, canvas.height - 20);
+                    ctx.fillText("Sweet Memory", 25, canvas.height - 25);
                 }
-                if(template === 'news') {
-                    ctx.fillStyle = "#cc0000";
-                    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
-                    ctx.fillStyle = "white";
-                    ctx.font = "bold 20px Arial";
-                    ctx.fillText("BREAKING NEWS", 10, canvas.height - 12);
-                }
-
-            }, [image, filter, template]);
+            }, [imgSrc, filter, template]);
 
             return (
-                <div className="glass-panel p-6 rounded-2xl">
-                    <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-blue-400"><ImageIcon/> Photo Studio</h2>
-                    <div className="grid md:grid-cols-2 gap-8">
-                        <div className="flex flex-col items-center justify-center bg-gray-900/50 rounded-xl p-4 min-h-[300px] border border-gray-700">
-                            {!image && (
-                                <label className="cursor-pointer flex flex-col items-center text-gray-500 hover:text-white transition">
-                                    <Upload size={40} className="mb-2"/> Upload Photo
-                                    <input type="file" onChange={handleFile} className="hidden"/>
+                <div className="glass p-6 rounded-xl">
+                    <h2 className="text-2xl font-bold mb-4 text-green-400"><i className="fa-solid fa-paintbrush"></i> Photo Studio</h2>
+                    
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div className="bg-gray-900 rounded p-2 flex flex-col items-center">
+                            {!imgSrc && (
+                                <label className="cursor-pointer bg-gray-800 px-4 py-2 rounded text-gray-300">
+                                    Upload Photo <input type="file" onChange={handleUpload} className="hidden"/>
                                 </label>
                             )}
-                            <canvas ref={canvasRef} className={`max-w-full rounded shadow-xl ${!image ? 'hidden' : ''}`}></canvas>
-                            {image && <div className="flex gap-2 mt-4"><label className="btn text-sm text-gray-400 cursor-pointer">Change<input type="file" onChange={handleFile} className="hidden"/></label><button onClick={() => {const link = document.createElement('a'); link.download='edit.png'; link.href=canvasRef.current.toDataURL(); link.click();}} className="text-green-400 text-sm">Download</button></div>}
+                            <canvas ref={canvasRef} className={`max-w-full ${!imgSrc ? 'hidden' : ''}`}></canvas>
+                            {imgSrc && <button onClick={() => {
+                                const link = document.createElement('a');
+                                link.download = 'edited.png';
+                                link.href = canvasRef.current.toDataURL();
+                                link.click();
+                            }} className="mt-2 text-green-400 text-sm">Download</button>}
                         </div>
-                        <div className="space-y-6">
+                        
+                        <div className="space-y-4">
                             <div>
-                                <h3 className="font-bold text-gray-400 mb-2">AI Filters</h3>
-                                <div className="flex gap-2 flex-wrap">
-                                    {['none', 'enhance', 'bw', 'vintage'].map(f => (
-                                        <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1 rounded capitalize ${filter===f ? 'bg-blue-600' : 'bg-gray-700'}`}>{f}</button>
-                                    ))}
+                                <h4 className="font-bold text-gray-400">Enhance / Filters</h4>
+                                <div className="flex gap-2 flex-wrap mt-1">
+                                    <button onClick={() => setFilter("")} className="bg-gray-700 px-3 py-1 rounded text-sm">None</button>
+                                    <button onClick={() => setFilter("contrast(1.2) brightness(1.1) saturate(1.2)")} className="bg-blue-600 px-3 py-1 rounded text-sm">Auto Enhance</button>
+                                    <button onClick={() => setFilter("grayscale(100%)")} className="bg-gray-700 px-3 py-1 rounded text-sm">B&W</button>
                                 </div>
                             </div>
                             <div>
-                                <h3 className="font-bold text-gray-400 mb-2">Templates</h3>
-                                <div className="flex gap-2 flex-wrap">
-                                    {['none', 'polaroid', 'news'].map(t => (
-                                        <button key={t} onClick={() => setTemplate(t)} className={`px-3 py-1 rounded capitalize ${template===t ? 'bg-purple-600' : 'bg-gray-700'}`}>{t}</button>
-                                    ))}
+                                <h4 className="font-bold text-gray-400">Templates</h4>
+                                <div className="flex gap-2 flex-wrap mt-1">
+                                    <button onClick={() => setTemplate("none")} className="bg-gray-700 px-3 py-1 rounded text-sm">None</button>
+                                    <button onClick={() => setTemplate("polaroid")} className="bg-white text-black px-3 py-1 rounded text-sm">Polaroid Frame</button>
                                 </div>
                             </div>
                         </div>
@@ -461,47 +431,41 @@
             );
         };
 
-        // --- Main App ---
+        // --- MAIN APP ---
         const App = () => {
-            const [active, setActive] = useState("chat");
+            const [tab, setTab] = useState('chat');
             const [apiKey, setApiKey] = useState(DEFAULT_API_KEY);
-            const [showSettings, setShowSettings] = useState(false);
-            const [toast, setToast] = useState(null);
 
             return (
-                <div className="flex flex-col md:flex-row max-w-6xl mx-auto min-h-screen md:p-8 p-4 gap-6">
-                    {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-                    
+                <div className="flex flex-col md:flex-row min-h-screen max-w-6xl mx-auto md:p-8 p-4 gap-6">
                     {/* Sidebar */}
-                    <div className="w-full md:w-64 glass-panel rounded-2xl p-6 flex flex-col gap-2 h-fit">
-                        <h1 className="text-3xl font-bold text-center mb-6 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">Gemini Hub</h1>
-                        <TabButton active={active} id="chat" icon={MessageSquare} label="AI Chat" onClick={setActive} />
-                        <TabButton active={active} id="girlfriend" icon={Heart} label="Girlfriend AI" onClick={setActive} />
-                        <TabButton active={active} id="caption" icon={Camera} label="Caption Gen" onClick={setActive} />
-                        <TabButton active={active} id="image" icon={Wand2} label="Text to Image" onClick={setActive} />
-                        <TabButton active={active} id="studio" icon={ImageIcon} label="Photo Studio" onClick={setActive} />
-                        
-                        <div className="mt-6 border-t border-gray-700 pt-4">
-                            <button onClick={() => setShowSettings(!showSettings)} className="flex items-center gap-2 text-gray-400 hover:text-white w-full px-4 py-2 rounded hover:bg-white/5 transition">
-                                <Settings size={18}/> Settings
-                            </button>
+                    <div className="w-full md:w-72 glass rounded-2xl flex flex-col h-fit">
+                        <div className="p-6 text-center border-b border-gray-700">
+                            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">Gemini AI Hub</h1>
                         </div>
+                        <MenuBtn icon="fa-comment-dots" label="AI Chat" active={tab==='chat'} onClick={() => setTab('chat')} />
+                        <MenuBtn icon="fa-heart" label="AI Girlfriend" active={tab==='gf'} onClick={() => setTab('gf')} />
+                        <MenuBtn icon="fa-image" label="Text to Image" active={tab==='img'} onClick={() => setTab('img')} />
+                        <MenuBtn icon="fa-camera" label="Caption Gen" active={tab==='cap'} onClick={() => setTab('cap')} />
+                        <MenuBtn icon="fa-wand-magic" label="Photo Studio" active={tab==='edit'} onClick={() => setTab('edit')} />
                         
-                        {showSettings && (
-                            <div className="mt-2 bg-black/40 p-3 rounded-lg">
-                                <label className="text-xs text-gray-500 mb-1 block">API Key:</label>
-                                <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1 text-xs text-white outline-none"/>
-                            </div>
-                        )}
+                        <div className="mt-auto p-4 border-t border-gray-700">
+                            <input 
+                                value={apiKey} 
+                                onChange={e => setApiKey(e.target.value)}
+                                className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-xs text-gray-400"
+                                placeholder="API Key"
+                            />
+                        </div>
                     </div>
 
                     {/* Content */}
                     <div className="flex-1">
-                        {active === 'chat' && <ChatBot apiKey={apiKey} mode="normal" setToast={setToast} />}
-                        {active === 'girlfriend' && <ChatBot apiKey={apiKey} mode="girlfriend" setToast={setToast} />}
-                        {active === 'caption' && <CaptionGen apiKey={apiKey} setToast={setToast} />}
-                        {active === 'image' && <ImageGen apiKey={apiKey} setToast={setToast} />}
-                        {active === 'studio' && <PhotoStudio setToast={setToast} />}
+                        {tab === 'chat' && <ChatBot apiKey={apiKey} mode="normal" />}
+                        {tab === 'gf' && <ChatBot apiKey={apiKey} mode="gf" />}
+                        {tab === 'img' && <ImageGen apiKey={apiKey} />}
+                        {tab === 'cap' && <CaptionGen apiKey={apiKey} />}
+                        {tab === 'edit' && <PhotoStudio />}
                     </div>
                 </div>
             );

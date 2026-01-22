@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini AI Super Hub</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Google Generative AI SDK -->
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
+        }
+      }
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@300;400;600;700&display=swap');
+        
+        body { 
+            font-family: 'Noto Sans Bengali', sans-serif; 
+            background-color: #0f172a;
+            color: white;
+        }
+
+        /* Glassmorphism Effect */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .glass-button {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        .glass-button:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        
+        /* Frame Styles */
+        .frame-polaroid { border: 12px solid #fff; border-bottom: 40px solid #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .frame-vintage { border: 8px double #a16207; filter: sepia(0.4); }
+        .frame-neon { border: 4px solid #0ff; box-shadow: 0 0 10px #0ff; }
+        
+        /* Animations */
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+        const { useState, useEffect, useRef } = React;
+        const { MessageSquare, Heart, Image: ImageIcon, Wand2, Settings, Upload, Download, Sparkles, RefreshCcw, Camera, X, Check, AlertCircle } = lucide;
+
+        // --- Config ---
+        const DEFAULT_API_KEY = "AIzaSyCYCWM8SmsehBmYIbQr5995OIf_idQWJXA";
+
+        // --- Helper: Imagen Generation ---
+        async function generateImageWithGemini(prompt, apiKey) {
+            // Trying standard imagen-3.0-generate-001 endpoint
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
+            
+            const payload = {
+                instances: [{ prompt: prompt }],
+                parameters: { sampleCount: 1, aspectRatio: "1:1" }
+            };
+
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                console.error("Gemini Image Error:", errData);
+                throw new Error("API Error: আপনার Key তে Imagen 3 পারমিশন নেই বা কোটা শেষ।");
+            }
+
+            const data = await response.json();
+            if(data.predictions && data.predictions[0]?.bytesBase64Encoded) {
+                return `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}`;
+            }
+            throw new Error("No image data returned.");
+        }
+
+        // --- Helper: Toast Notification ---
+        const Toast = ({ msg, type, onClose }) => {
+            useEffect(() => {
+                const timer = setTimeout(onClose, 3000);
+                return () => clearTimeout(timer);
+            }, [onClose]);
+
+            return (
+                <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-bounce ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`}>
+                    {type === 'error' ? <AlertCircle size={18}/> : <Check size={18}/>}
+                    <span className="font-semibold">{msg}</span>
+                </div>
+            );
+        };
+
+        // --- Component: Sidebar Tab ---
+        const TabButton = ({ active, id, icon: Icon, label, onClick }) => (
+            <button 
+                onClick={() => onClick(id)}
+                className={`flex items-center gap-3 px-4 py-3 w-full text-left rounded-xl transition-all duration-300 group ${
+                    active === id 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 translate-x-1' 
+                    : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                }`}
+            >
+                <Icon size={20} className={`transition-transform duration-300 ${active===id ? 'scale-110' : 'group-hover:scale-110'}`} />
+                <span className="font-medium tracking-wide">{label}</span>
+            </button>
+        );
+
+        // --- Component: Chat & Girlfriend ---
+        const ChatBot = ({ apiKey, mode, setToast }) => {
+            const [messages, setMessages] = useState([]);
+            const [input, setInput] = useState("");
+            const [loading, setLoading] = useState(false);
+            const chatEndRef = useRef(null);
+
+            useEffect(() => {
+                setMessages([]); 
+                if(mode === 'girlfriend') {
+                    setMessages([{role: 'model', text: "হাই বাবু! ❤️ কেমন আছো? তোমাকে অনেক মিস করছিলাম!"}]);
+                } else {
+                    setMessages([{role: 'model', text: "নমস্কার! আমি Gemini AI, বলুন আপনাকে কীভাবে সাহায্য করতে পারি?"}]);
+                }
+            }, [mode]);
+
+            const sendMessage = async () => {
+                if (!input.trim() || !apiKey) {
+                    if(!apiKey) setToast({msg: "Settings এ গিয়ে API Key সেট করুন!", type: "error"});
+                    return;
+                }
+                const userMsg = input;
+                setMessages(prev => [...prev, { role: "user", text: userMsg }]);
+                setInput("");
+                setLoading(true);
+
+                try {
+                    const genAI = new GoogleGenerativeAI(apiKey);
+                    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+                    
+                    let systemPrompt = mode === 'girlfriend' 
+                        ? "Act as a sweet, caring, and possessive girlfriend named 'Riya'. Speak in a mix of Bengali and English (Banglish). Use emojis (❤️, 😘, 🥺, 😠). Call the user 'Babu' or 'Jan'. Reply concisely."
+                        : "You are a helpful AI assistant. Answer in Bengali.";
+
+                    const result = await model.generateContent(`${systemPrompt}\nUser: ${userMsg}`);
+                    const response = await result.response;
+                    setMessages(prev => [...prev, { role: "model", text: response.text() }]);
+                } catch (error) {
+                    setMessages(prev => [...prev, { role: "model", text: "API Error: দয়া করে Key চেক করুন।" }]);
+                }
+                setLoading(false);
+            };
+
+            useEffect(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
+
+            return (
+                <div className="flex flex-col h-[550px] glass-panel rounded-2xl overflow-hidden relative">
+                    <div className={`p-4 flex items-center gap-3 border-b border-white/10 ${mode === 'girlfriend' ? 'bg-pink-500/10' : 'bg-blue-500/10'}`}>
+                        <div className="w-10 h-10 rounded-full bg-gray-700 overflow-hidden border-2 border-white/20">
+                            <img src={mode === 'girlfriend' ? "https://api.dicebear.com/7.x/avataaars/svg?seed=Riya&gender=female&style=circle" : "https://api.dicebear.com/7.x/bottts/svg?seed=Gemini"} alt="AI" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-lg">{mode === 'girlfriend' ? 'Riya ❤️' : 'Gemini AI'}</h3>
+                            <div className="flex items-center gap-1 text-xs text-green-400">
+                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Active Now
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {messages.map((msg, idx) => (
+                            <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                                <div className={`max-w-[80%] px-4 py-2 rounded-2xl ${
+                                    msg.role === "user" 
+                                    ? "bg-blue-600 text-white rounded-tr-sm" 
+                                    : "bg-gray-700/50 text-gray-100 rounded-tl-sm border border-white/5"
+                                }`}>
+                                    {msg.text}
+                                </div>
+                            </div>
+                        ))}
+                        {loading && <div className="text-gray-400 text-xs ml-4">টাইপ করছে...</div>}
+                        <div ref={chatEndRef} />
+                    </div>
+
+                    <div className="p-3 bg-gray-800/50 flex gap-2">
+                        <input
+                            type="text"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                            placeholder={mode === 'girlfriend' ? "ভালোবাসার কথা লিখুন..." : "প্রশ্ন করুন..."}
+                            className="flex-1 bg-gray-900 border border-gray-600 rounded-full px-4 focus:border-blue-500 outline-none transition"
+                        />
+                        <button onClick={sendMessage} className="bg-blue-600 p-3 rounded-full hover:bg-blue-500 transition shadow-lg">
+                            <MessageSquare size={18} />
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Component: Caption Generator ---
+        const CaptionGen = ({ apiKey, setToast }) => {
+            const [image, setImage] = useState(null);
+            const [preview, setPreview] = useState(null);
+            const [category, setCategory] = useState("Happy");
+            const [caption, setCaption] = useState("");
+            const [loading, setLoading] = useState(false);
+
+            const handleFile = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    setImage(file);
+                    setPreview(URL.createObjectURL(file));
+                    setCaption("");
+                }
+            };
+
+            const generate = async () => {
+                if (!image || !apiKey) {
+                    if(!apiKey) setToast({msg: "API Key নেই!", type: "error"});
+                    return;
+                }
+                setLoading(true);
+                try {
+                    const genAI = new GoogleGenerativeAI(apiKey);
+                    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                    
+                    const reader = new FileReader();
+                    reader.readAsDataURL(image);
+                    reader.onloadend = async () => {
+                        const base64Data = reader.result.split(',')[1];
+                        const prompt = `Write a short social media caption for this image. Mood: ${category}. Language: Bengali mixed with English. Add hashtags.`;
+                        
+                        const result = await model.generateContent([prompt, { inlineData: { data: base64Data, mimeType: image.type } }]);
+                        setCaption(result.response.text());
+                        setLoading(false);
+                    };
+                } catch (e) {
+                    setToast({msg: "Error Generating Caption", type: "error"});
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="glass-panel p-6 rounded-2xl">
+                    <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-purple-400"><Camera/> AI Caption</h2>
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div className="relative border-2 border-dashed border-gray-600 rounded-xl min-h-[250px] flex items-center justify-center bg-gray-800/30 hover:border-purple-500 transition overflow-hidden">
+                            {preview ? <img src={preview} className="w-full h-full object-cover" /> : <div className="text-gray-500 text-center"><Upload className="mx-auto mb-2"/>Upload Image</div>}
+                            <input type="file" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*"/>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-gray-400 text-sm block mb-2">Mood Select:</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {['Happy', 'Sad', 'Attitude', 'Travel', 'Food'].map(c => (
+                                        <button key={c} onClick={() => setCategory(c)} className={`px-3 py-1 rounded-full text-xs transition ${category===c ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300'}`}>{c}</button>
+                                    ))}
+                                </div>
+                            </div>
+                            <button onClick={generate} disabled={loading || !image} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-3 rounded-xl font-bold disabled:opacity-50">
+                                {loading ? "Generating..." : "Generate Caption"}
+                            </button>
+                            {caption && (
+                                <div className="p-4 bg-gray-800 rounded-xl border border-gray-700 mt-2 relative">
+                                    <p className="text-sm whitespace-pre-line">{caption}</p>
+                                    <button onClick={() => {navigator.clipboard.writeText(caption); setToast({msg:"Copied!", type:"success"})}} className="absolute top-2 right-2 text-gray-400 hover:text-white"><Check size={16}/></button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Component: Text to Image ---
+        const ImageGen = ({ apiKey, setToast }) => {
+            const [prompt, setPrompt] = useState("");
+            const [img, setImg] = useState(null);
+            const [loading, setLoading] = useState(false);
+
+            const handleGen = async () => {
+                if(!prompt) return;
+                setLoading(true);
+                setImg(null);
+                try {
+                    const url = await generateImageWithGemini(prompt, apiKey);
+                    setImg(url);
+                } catch (e) {
+                    setToast({msg: "ছবি তৈরি ব্যর্থ হয়েছে। Key বা কোটা চেক করুন।", type: "error"});
+                    console.error(e);
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="glass-panel p-6 rounded-2xl text-center">
+                    <h2 className="text-2xl font-bold mb-6 flex items-center justify-center gap-2 text-pink-400"><Wand2/> Text to Image</h2>
+                    <div className="flex gap-2 max-w-lg mx-auto mb-6">
+                        <input 
+                            value={prompt} 
+                            onChange={(e)=>setPrompt(e.target.value)} 
+                            placeholder="A futuristic city in Bangladesh..." 
+                            className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 focus:border-pink-500 outline-none"
+                        />
+                        <button onClick={handleGen} disabled={loading} className="bg-pink-600 px-6 rounded-lg font-bold hover:bg-pink-500 transition disabled:opacity-50">
+                            {loading ? <RefreshCcw className="animate-spin"/> : "Create"}
+                        </button>
+                    </div>
+                    <div className="min-h-[300px] bg-gray-900/50 rounded-xl flex items-center justify-center border-2 border-dashed border-gray-700 relative">
+                        {loading ? (
+                            <div className="text-pink-400 animate-pulse flex flex-col items-center">
+                                <Sparkles size={40} className="mb-2"/>
+                                <p>Generating Art...</p>
+                            </div>
+                        ) : img ? (
+                            <div className="relative group w-full h-full p-2">
+                                <img src={img} className="max-h-[400px] mx-auto rounded-lg shadow-2xl" />
+                                <a href={img} download="ai_art.png" className="absolute bottom-4 right-4 bg-white text-black p-2 rounded-full opacity-0 group-hover:opacity-100 transition"><Download size={20}/></a>
+                            </div>
+                        ) : (
+                            <div className="text-gray-600 flex flex-col items-center"><ImageIcon size={48} className="mb-2 opacity-30"/><p>No image generated yet</p></div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Component: Photo Studio ---
+        const PhotoStudio = ({ setToast }) => {
+            const [image, setImage] = useState(null);
+            const [filter, setFilter] = useState("none");
+            const [template, setTemplate] = useState("none");
+            const canvasRef = useRef(null);
+
+            const handleFile = (e) => {
+                if(e.target.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        const img = new Image();
+                        img.onload = () => setImage(img);
+                        img.src = ev.target.result;
+                    };
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            };
+
+            useEffect(() => {
+                if(!image || !canvasRef.current) return;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext("2d");
+                
+                // Scale logic
+                const scale = Math.min(600 / image.width, 1);
+                canvas.width = image.width * scale;
+                canvas.height = image.height * scale;
+
+                // Draw with Filter
+                ctx.filter = "none";
+                if(filter === 'enhance') ctx.filter = "contrast(1.2) brightness(1.1) saturate(1.2)";
+                if(filter === 'bw') ctx.filter = "grayscale(100%)";
+                if(filter === 'vintage') ctx.filter = "sepia(0.5)";
+                
+                ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                ctx.filter = "none";
+
+                // Draw Template
+                if(template === 'polaroid') {
+                    ctx.strokeStyle = "white";
+                    ctx.lineWidth = 30;
+                    ctx.strokeRect(0,0,canvas.width,canvas.height);
+                    ctx.fillStyle = "white";
+                    ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+                    ctx.fillStyle = "black";
+                    ctx.font = "20px Arial";
+                    ctx.fillText("AI Memories", 20, canvas.height - 20);
+                }
+                if(template === 'news') {
+                    ctx.fillStyle = "#cc0000";
+                    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+                    ctx.fillStyle = "white";
+                    ctx.font = "bold 20px Arial";
+                    ctx.fillText("BREAKING NEWS", 10, canvas.height - 12);
+                }
+
+            }, [image, filter, template]);
+
+            return (
+                <div className="glass-panel p-6 rounded-2xl">
+                    <h2 className="text-2xl font-bold mb-4 flex items-center gap-2 text-blue-400"><ImageIcon/> Photo Studio</h2>
+                    <div className="grid md:grid-cols-2 gap-8">
+                        <div className="flex flex-col items-center justify-center bg-gray-900/50 rounded-xl p-4 min-h-[300px] border border-gray-700">
+                            {!image && (
+                                <label className="cursor-pointer flex flex-col items-center text-gray-500 hover:text-white transition">
+                                    <Upload size={40} className="mb-2"/> Upload Photo
+                                    <input type="file" onChange={handleFile} className="hidden"/>
+                                </label>
+                            )}
+                            <canvas ref={canvasRef} className={`max-w-full rounded shadow-xl ${!image ? 'hidden' : ''}`}></canvas>
+                            {image && <div className="flex gap-2 mt-4"><label className="btn text-sm text-gray-400 cursor-pointer">Change<input type="file" onChange={handleFile} className="hidden"/></label><button onClick={() => {const link = document.createElement('a'); link.download='edit.png'; link.href=canvasRef.current.toDataURL(); link.click();}} className="text-green-400 text-sm">Download</button></div>}
+                        </div>
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="font-bold text-gray-400 mb-2">AI Filters</h3>
+                                <div className="flex gap-2 flex-wrap">
+                                    {['none', 'enhance', 'bw', 'vintage'].map(f => (
+                                        <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1 rounded capitalize ${filter===f ? 'bg-blue-600' : 'bg-gray-700'}`}>{f}</button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-400 mb-2">Templates</h3>
+                                <div className="flex gap-2 flex-wrap">
+                                    {['none', 'polaroid', 'news'].map(t => (
+                                        <button key={t} onClick={() => setTemplate(t)} className={`px-3 py-1 rounded capitalize ${template===t ? 'bg-purple-600' : 'bg-gray-700'}`}>{t}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Main App ---
+        const App = () => {
+            const [active, setActive] = useState("chat");
+            const [apiKey, setApiKey] = useState(DEFAULT_API_KEY);
+            const [showSettings, setShowSettings] = useState(false);
+            const [toast, setToast] = useState(null);
+
+            return (
+                <div className="flex flex-col md:flex-row max-w-6xl mx-auto min-h-screen md:p-8 p-4 gap-6">
+                    {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+                    
+                    {/* Sidebar */}
+                    <div className="w-full md:w-64 glass-panel rounded-2xl p-6 flex flex-col gap-2 h-fit">
+                        <h1 className="text-3xl font-bold text-center mb-6 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">Gemini Hub</h1>
+                        <TabButton active={active} id="chat" icon={MessageSquare} label="AI Chat" onClick={setActive} />
+                        <TabButton active={active} id="girlfriend" icon={Heart} label="Girlfriend AI" onClick={setActive} />
+                        <TabButton active={active} id="caption" icon={Camera} label="Caption Gen" onClick={setActive} />
+                        <TabButton active={active} id="image" icon={Wand2} label="Text to Image" onClick={setActive} />
+                        <TabButton active={active} id="studio" icon={ImageIcon} label="Photo Studio" onClick={setActive} />
+                        
+                        <div className="mt-6 border-t border-gray-700 pt-4">
+                            <button onClick={() => setShowSettings(!showSettings)} className="flex items-center gap-2 text-gray-400 hover:text-white w-full px-4 py-2 rounded hover:bg-white/5 transition">
+                                <Settings size={18}/> Settings
+                            </button>
+                        </div>
+                        
+                        {showSettings && (
+                            <div className="mt-2 bg-black/40 p-3 rounded-lg">
+                                <label className="text-xs text-gray-500 mb-1 block">API Key:</label>
+                                <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1 text-xs text-white outline-none"/>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1">
+                        {active === 'chat' && <ChatBot apiKey={apiKey} mode="normal" setToast={setToast} />}
+                        {active === 'girlfriend' && <ChatBot apiKey={apiKey} mode="girlfriend" setToast={setToast} />}
+                        {active === 'caption' && <CaptionGen apiKey={apiKey} setToast={setToast} />}
+                        {active === 'image' && <ImageGen apiKey={apiKey} setToast={setToast} />}
+                        {active === 'studio' && <PhotoStudio setToast={setToast} />}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
+
